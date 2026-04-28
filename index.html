@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#0f1117" />
+  <title>FeverCycle</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:#0f1117;--surface:#181c27;--surface2:#1e2333;
+      --border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.15);
+      --text:#f0f2f8;--text2:#a0a8c0;--text3:#6b7491;
+      --green:#3ecf8e;--green-dim:rgba(62,207,142,0.13);
+      --red:#f4645f;--red-dim:rgba(244,100,95,0.13);
+      --blue:#4f9cf9;--blue-dim:rgba(79,156,249,0.13);
+      --amber:#f5a623;--amber-dim:rgba(245,166,35,0.13);
+      --purple:#b39dfa;--purple-dim:rgba(179,157,250,0.13);
+      --safe-top:env(safe-area-inset-top,0px);--safe-bottom:env(safe-area-inset-bottom,0px);
+    }
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+    html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;overscroll-behavior:none;}
+    body{padding-top:var(--safe-top);padding-bottom:var(--safe-bottom);}
+    .app{max-width:430px;margin:0 auto;height:100dvh;display:flex;flex-direction:column;}
+
+    /* SETUP */
+    .setup-screen{position:fixed;inset:0;background:var(--bg);z-index:100;display:flex;align-items:center;justify-content:center;padding:32px 24px;}
+    .setup-box{width:100%;max-width:360px;}
+    .setup-icon{font-size:44px;margin-bottom:20px;}
+    .setup-box h2{font-size:24px;font-weight:600;letter-spacing:-0.4px;margin-bottom:10px;}
+    .setup-box p{font-size:15px;color:var(--text2);line-height:1.6;margin-bottom:28px;}
+    .setup-input{width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:14px;padding:16px;font-size:18px;font-family:'DM Mono',monospace;color:var(--text);outline:none;letter-spacing:1px;margin-bottom:14px;}
+    .setup-input:focus{border-color:var(--blue);}
+    .setup-input::placeholder{color:var(--text3);font-family:'DM Sans',sans-serif;letter-spacing:0;font-size:15px;}
+    .setup-btn{width:100%;background:var(--blue);border:none;border-radius:14px;padding:17px;font-size:16px;font-weight:600;font-family:'DM Sans',sans-serif;color:#fff;cursor:pointer;}
+    .setup-btn:disabled{opacity:0.35;}
+    .setup-btn:not(:disabled):active{opacity:0.85;}
+    .setup-hint{font-size:13px;color:var(--text3);text-align:center;margin-top:14px;line-height:1.6;}
+
+    /* TOPBAR */
+    .topbar{padding:16px 20px 0;position:sticky;top:var(--safe-top);background:var(--bg);z-index:10;flex-shrink:0;}
+    .topbar-row1{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;}
+    .topbar-left h1{font-size:22px;font-weight:600;letter-spacing:-0.5px;}
+    .topbar-left p{font-size:13px;color:var(--text2);margin-top:2px;}
+    .room-badge{background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:6px 13px;font-size:12px;font-family:'DM Mono',monospace;color:var(--text2);cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:6px;}
+    .sync-dot{width:7px;height:7px;border-radius:50%;background:var(--green);flex-shrink:0;}
+    .sync-dot.offline{background:var(--text3);}
+    .tabs{display:flex;border-bottom:1px solid var(--border);}
+    .tab{flex:1;padding:10px;text-align:center;font-size:14px;font-weight:500;color:var(--text3);background:none;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;border-bottom:2px solid transparent;transition:color 0.15s,border-color 0.15s;}
+    .tab.active{color:var(--blue);border-bottom-color:var(--blue);}
+
+    /* MAIN CONTENT */
+    .content{flex:1;overflow:hidden;display:flex;flex-direction:column;}
+    .tab-panel{display:none;flex:1;overflow-y:auto;padding:14px 16px 20px;}
+    .tab-panel.active{display:flex;flex-direction:column;}
+
+    /* TRACKER PANEL — fills height, no scroll */
+    #panel-tracker{overflow:hidden;justify-content:space-between;}
+
+    /* NEXT BANNER */
+    .next-banner{border-radius:16px;padding:16px 20px;flex-shrink:0;animation:fadeIn 0.3s ease;}
+    .next-banner.ready{background:var(--green-dim);border:1px solid rgba(62,207,142,0.3);}
+    .next-banner.waiting{background:var(--amber-dim);border:1px solid rgba(245,166,35,0.3);}
+    .next-banner.soon{background:var(--blue-dim);border:1px solid rgba(79,156,249,0.3);}
+    .next-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px;}
+    .next-banner.ready .next-label{color:var(--green);}
+    .next-banner.waiting .next-label{color:var(--amber);}
+    .next-banner.soon .next-label{color:var(--blue);}
+    .next-med{font-size:22px;font-weight:600;letter-spacing:-0.3px;margin-bottom:3px;}
+    .next-banner.ready .next-med{color:var(--green);}
+    .next-banner.waiting .next-med{color:var(--amber);}
+    .next-banner.soon .next-med{color:var(--blue);}
+    .next-time{font-size:14px;color:var(--text);}
+    .next-countdown{font-size:13px;color:var(--text2);margin-top:2px;}
+
+    /* MED CARDS — side by side, take up remaining space */
+    .med-cards{display:grid;grid-template-columns:1fr 1fr;gap:12px;flex:1;margin-top:12px;}
+
+    /* Each card is a big tappable button */
+    .med-card{background:var(--surface);border:1px solid var(--border);border-radius:20px;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:16px 12px;transition:transform 0.12s cubic-bezier(0.34,1.56,0.64,1);-webkit-tap-highlight-color:transparent;text-align:center;user-select:none;}
+    .med-card:active{transform:scale(0.96);}
+    .med-card.novimol{border-top:3px solid var(--amber);}
+    .med-card.nurofen{border-top:3px solid var(--purple);}
+    .med-card.next-up.novimol{background:var(--amber-dim);border-color:var(--amber);}
+    .med-card.next-up.nurofen{background:var(--purple-dim);border-color:var(--purple);}
+
+    .med-card-top{width:100%;}
+    .med-card-name{font-size:18px;font-weight:600;letter-spacing:-0.2px;margin-bottom:2px;}
+    .med-card.novimol .med-card-name{color:var(--amber);}
+    .med-card.nurofen .med-card-name{color:var(--purple);}
+    .med-card-status{font-size:12px;font-weight:500;min-height:16px;}
+    .med-card.novimol .med-card-status{color:var(--amber);}
+    .med-card.nurofen .med-card-status{color:var(--purple);}
+
+    /* 2×2 CIRCLES GRID */
+    .circles-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%;margin:10px 0;}
+
+    .dose-slot{display:flex;flex-direction:column;align-items:center;gap:3px;}
+
+    .dose-circle{width:100%;aspect-ratio:1;border-radius:50%;display:flex;align-items:center;justify-content:center;pointer-events:none;/* card handles tap */}
+
+    .dose-circle.empty{background:var(--red-dim);border:2px solid var(--red);}
+    .dose-circle.given{background:var(--green);border:2px solid var(--green);}
+    .dose-circle.inactive{background:rgba(255,255,255,0.03);border:2px solid rgba(255,255,255,0.06);}
+
+    .dose-circle.empty::after{content:'';width:11px;height:11px;border-radius:50%;background:var(--red);}
+    .dose-circle.given::after{content:'';width:16px;height:11px;border:2.5px solid #0f1117;border-top:none;border-right:none;transform:rotate(-45deg) translateY(-2px);}
+
+    .dose-ts{font-size:10px;font-family:'DM Mono',monospace;color:var(--text3);min-height:13px;text-align:center;line-height:1;}
+    .dose-slot.given-slot .dose-ts{color:var(--green);}
+
+    .early-tag{font-size:11px;color:var(--red);background:var(--red-dim);border:1px solid rgba(244,100,95,0.25);border-radius:8px;padding:3px 8px;font-weight:500;}
+
+    /* LOG TAB */
+    #panel-log{overflow-y:auto;}
+    .log-entry{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;animation:slideUp 0.2s ease both;flex-shrink:0;}
+    .log-med{font-size:16px;font-weight:600;}
+    .log-med.novimol{color:var(--amber);}
+    .log-med.nurofen{color:var(--purple);}
+    .log-meta{font-size:13px;font-family:'DM Mono',monospace;color:var(--text2);margin-top:3px;}
+    .log-undo{background:none;border:1px solid var(--border2);border-radius:9px;padding:6px 12px;font-size:12px;font-weight:500;color:var(--text2);cursor:pointer;font-family:'DM Sans',sans-serif;flex-shrink:0;}
+    .log-undo:active{background:var(--red-dim);color:var(--red);border-color:rgba(244,100,95,0.3);}
+    .section-title{font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:12px;font-family:'DM Mono',monospace;flex-shrink:0;}
+    .empty-log{text-align:center;padding:40px 20px;font-size:14px;color:var(--text3);}
+
+    @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+    @keyframes slideUp{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+  </style>
+</head>
+<body>
+
+<!-- SETUP -->
+<div class="setup-screen" id="setup-screen" style="display:none">
+  <div class="setup-box">
+    <div class="setup-icon">💊</div>
+    <h2>Welcome to FeverCycle</h2>
+    <p>Enter a shared room code to sync with your partner. Both phones must use the exact same code.</p>
+    <input class="setup-input" id="room-input" type="text" placeholder="e.g. our-baby" autocomplete="off" autocorrect="off" spellcheck="false" />
+    <button class="setup-btn" id="setup-btn" onclick="setupRoom()" disabled>Start tracking</button>
+    <div class="setup-hint">Choose anything memorable.<br>This is your private shared key.</div>
+  </div>
+</div>
+
+<div class="app" id="main-app" style="display:none">
+  <div class="topbar">
+    <div class="topbar-row1">
+      <div class="topbar-left">
+        <h1>FeverCycle</h1>
+        <p>נובימול &amp; נורופן · every 4h</p>
+      </div>
+      <div class="room-badge" id="room-badge" onclick="changeRoom()">
+        <span class="sync-dot" id="sync-dot"></span>
+        <span id="room-label"></span>
+      </div>
+    </div>
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('tracker', this)">Tracker</button>
+      <button class="tab" onclick="switchTab('log', this)">Log</button>
+    </div>
+  </div>
+
+  <div class="content">
+    <!-- TRACKER — no scroll, fits screen -->
+    <div class="tab-panel active" id="panel-tracker">
+      <div id="next-banner"></div>
+      <div class="med-cards">
+
+        <div class="med-card novimol" id="card-novimol" onclick="giveMed('novimol')">
+          <div class="med-card-top">
+            <div class="med-card-name">נובימול</div>
+            <div class="med-card-status" id="status-novimol"></div>
+          </div>
+          <div class="circles-grid" id="circles-novimol"></div>
+          <div id="early-novimol"></div>
+        </div>
+
+        <div class="med-card nurofen" id="card-nurofen" onclick="giveMed('nurofen')">
+          <div class="med-card-top">
+            <div class="med-card-name">נורופן</div>
+            <div class="med-card-status" id="status-nurofen"></div>
+          </div>
+          <div class="circles-grid" id="circles-nurofen"></div>
+          <div id="early-nurofen"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- LOG -->
+    <div class="tab-panel" id="panel-log">
+      <div class="section-title">All doses given</div>
+      <div id="log-list"></div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+  import { getDatabase, ref, push, remove, onValue, set } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAwf92xnSkGATAnDpFHVeo0yjff_LNTHF0",
+    authDomain: "fevertrack-2fedb.firebaseapp.com",
+    databaseURL: "https://fevertrack-2fedb-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "fevertrack-2fedb",
+    storageBucket: "fevertrack-2fedb.firebasestorage.app",
+    messagingSenderId: "202467683554",
+    appId: "1:202467683554:web:17131e1bee4e1cf90602bb"
+  };
+
+  const INTERVAL_MS = 4 * 60 * 60 * 1000;
+  const WINDOW_MS   = 24 * 60 * 60 * 1000;
+  const MAX_SLOTS   = 4;
+  const ROOM_KEY    = 'fevercycle_room_v1';
+
+  let db, roomCode, dosesRef, doses = {};
+
+  function init() {
+    const app = initializeApp(firebaseConfig);
+    db = getDatabase(app);
+    const saved = localStorage.getItem(ROOM_KEY);
+    if (saved) { roomCode = saved; showApp(); connectRoom(); }
+    else { document.getElementById('setup-screen').style.display = 'flex'; }
+  }
+
+  const roomInput = document.getElementById('room-input');
+  roomInput.addEventListener('input', () => {
+    document.getElementById('setup-btn').disabled = !roomInput.value.trim();
+  });
+  roomInput.addEventListener('keydown', e => { if (e.key === 'Enter') setupRoom(); });
+
+  window.setupRoom = function() {
+    const val = roomInput.value.trim().toLowerCase().replace(/\s+/g, '-');
+    if (!val) return;
+    roomCode = val;
+    localStorage.setItem(ROOM_KEY, roomCode);
+    document.getElementById('setup-screen').style.display = 'none';
+    showApp(); connectRoom();
+  };
+
+  window.changeRoom = function() {
+    if (!confirm('Change room code? You will need to re-enter it on all devices.')) return;
+    localStorage.removeItem(ROOM_KEY);
+    doses = {};
+    document.getElementById('main-app').style.display = 'none';
+    document.getElementById('setup-screen').style.display = 'flex';
+    roomInput.value = '';
+    document.getElementById('setup-btn').disabled = true;
+  };
+
+  function showApp() {
+    document.getElementById('main-app').style.display = 'flex';
+    document.getElementById('room-label').textContent = roomCode;
+  }
+
+  function connectRoom() {
+    dosesRef = ref(db, `rooms/${roomCode}/doses`);
+    onValue(dosesRef, snap => {
+      document.getElementById('sync-dot').className = 'sync-dot';
+      doses = snap.val() || {};
+      cleanup30Days();
+      render();
+      renderLogIfVisible();
+    }, () => {
+      document.getElementById('sync-dot').className = 'sync-dot offline';
+    });
+  }
+
+  function cleanup30Days() {
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    Object.entries(doses).forEach(([key, val]) => {
+      if (new Date(val.ts).getTime() < cutoff) {
+        remove(ref(db, `rooms/${roomCode}/doses/${key}`));
+      }
+    });
+  }
+
+  // ── DATA ──────────────────────────────────────────────────────────────────
+  function dosesArray() {
+    return Object.entries(doses)
+      .map(([key, val]) => ({ key, ...val }))
+      .sort((a, b) => new Date(b.ts) - new Date(a.ts));
+  }
+
+  function dosesFor(med) { return dosesArray().filter(d => d.med === med); }
+  function lastDose(med) { return dosesFor(med)[0] || null; }
+  function recentDoses(med) {
+    const cutoff = Date.now() - WINDOW_MS;
+    return dosesFor(med).filter(d => new Date(d.ts).getTime() > cutoff);
+  }
+
+  // ── ACTIONS ───────────────────────────────────────────────────────────────
+  window.giveMed = function(med) {
+    const last = lastDose(med);
+    const now = Date.now();
+    if (last) {
+      const msSince = now - new Date(last.ts).getTime();
+      if (msSince < INTERVAL_MS) {
+        const name = med === 'novimol' ? 'נובימול' : 'נורופן';
+        if (!confirm(`⚠️ Only ${fmtCountdown(INTERVAL_MS - msSince)} since last ${name}.\n\nGive it anyway?`)) return;
+      }
+    }
+    push(dosesRef, { med, ts: new Date().toISOString() });
+  };
+
+  window.undoDose = function(key) {
+    if (!confirm('Remove this dose?')) return;
+    remove(ref(db, `rooms/${roomCode}/doses/${key}`));
+  };
+
+  // ── FORMAT ────────────────────────────────────────────────────────────────
+  function fmtTime(iso) {
+    const d = new Date(iso);
+    return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  }
+
+  function fmtDate(iso) {
+    return new Date(iso).toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+  }
+
+  function fmtCountdown(ms) {
+    if (ms <= 0) return 'now';
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
+  }
+
+  // ── TAB ───────────────────────────────────────────────────────────────────
+  window.switchTab = function(tab, el) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('panel-' + tab).classList.add('active');
+    if (tab === 'log') renderLog();
+  };
+
+  function renderLogIfVisible() {
+    if (document.getElementById('panel-log').classList.contains('active')) renderLog();
+  }
+
+  // ── CIRCLES ───────────────────────────────────────────────────────────────
+  function renderCircles(med) {
+    const recent = recentDoses(med);           // within 24h, newest first
+    const oldestFirst = [...recent].reverse(); // oldest first for display
+    const container = document.getElementById('circles-' + med);
+
+    let html = '';
+    for (let i = 0; i < MAX_SLOTS; i++) {
+      const dose = oldestFirst[i];
+      if (dose) {
+        // Given dose in window
+        html += `<div class="dose-slot given-slot">
+          <div class="dose-circle given"></div>
+          <span class="dose-ts">${fmtTime(dose.ts)}</span>
+        </div>`;
+      } else if (i === recent.length) {
+        // Next available slot (the one that will fill on next tap)
+        html += `<div class="dose-slot">
+          <div class="dose-circle empty"></div>
+          <span class="dose-ts"></span>
+        </div>`;
+      } else {
+        // Future slot — dimmed
+        html += `<div class="dose-slot">
+          <div class="dose-circle inactive"></div>
+          <span class="dose-ts"></span>
+        </div>`;
+      }
+    }
+    container.innerHTML = html;
+  }
+
+  // ── RENDER ────────────────────────────────────────────────────────────────
+  function render() {
+    const now = Date.now();
+
+    for (const med of ['novimol', 'nurofen']) {
+      const last = lastDose(med);
+      const msUntil = last ? (new Date(last.ts).getTime() + INTERVAL_MS) - now : 0;
+      const ready = msUntil <= 0;
+
+      document.getElementById('card-' + med).className = `med-card ${med}${ready ? ' next-up' : ''}`;
+      document.getElementById('status-' + med).textContent = ready
+        ? (last ? '✓ Ready' : 'Tap to give')
+        : `Next at ${fmtTime(new Date(now + msUntil).toISOString())}`;
+      document.getElementById('early-' + med).innerHTML = (!ready && last)
+        ? `<span class="early-tag">${fmtCountdown(msUntil)} early</span>` : '';
+
+      renderCircles(med);
+    }
+
+    // Banner
+    const lastN = lastDose('novimol');
+    const lastR = lastDose('nurofen');
+    const msN = lastN ? (new Date(lastN.ts).getTime() + INTERVAL_MS) - now : 0;
+    const msR = lastR ? (new Date(lastR.ts).getTime() + INTERVAL_MS) - now : 0;
+    const readyN = msN <= 0, readyR = msR <= 0;
+    const banner = document.getElementById('next-banner');
+
+    if (!lastN && !lastR) {
+      banner.className = 'next-banner ready';
+      banner.innerHTML = `<div class="next-label">Start with</div>
+        <div class="next-med">Either medication</div>
+        <div class="next-time">Tap a card below to give the first dose</div>`;
+      return;
+    }
+
+    if (readyN && readyR) {
+      banner.className = 'next-banner ready';
+      banner.innerHTML = `<div class="next-label">Ready now</div>
+        <div class="next-med">Both medications</div>
+        <div class="next-time">Tap a card to give</div>`;
+    } else if (readyN) {
+      banner.className = 'next-banner ready';
+      banner.innerHTML = `<div class="next-label">Ready now</div>
+        <div class="next-med">נובימול</div>
+        <div class="next-time">Tap the card to give</div>`;
+    } else if (readyR) {
+      banner.className = 'next-banner ready';
+      banner.innerHTML = `<div class="next-label">Ready now</div>
+        <div class="next-med">נורופן</div>
+        <div class="next-time">Tap the card to give</div>`;
+    } else {
+      const [soonestMs, soonestMed] = msN < msR ? [msN, 'novimol'] : [msR, 'nurofen'];
+      const name = soonestMed === 'novimol' ? 'נובימול' : 'נורופן';
+      const cls = soonestMs < 30 * 60 * 1000 ? 'soon' : 'waiting';
+      banner.className = `next-banner ${cls}`;
+      banner.innerHTML = `<div class="next-label">Next dose</div>
+        <div class="next-med">${name}</div>
+        <div class="next-time">At ${fmtTime(new Date(now + soonestMs).toISOString())}</div>
+        <div class="next-countdown">In ${fmtCountdown(soonestMs)}</div>`;
+    }
+  }
+
+  // ── LOG ───────────────────────────────────────────────────────────────────
+  function renderLog() {
+    const list = document.getElementById('log-list');
+    const arr = dosesArray();
+    if (arr.length === 0) {
+      list.innerHTML = `<div class="empty-log">No doses given yet.</div>`;
+      return;
+    }
+    const today = new Date().toLocaleDateString('en-CA');
+    list.innerHTML = arr.map((d, i) => {
+      const name = d.med === 'novimol' ? 'נובימול' : 'נורופן';
+      const dDay = new Date(d.ts).toLocaleDateString('en-CA');
+      const dateLabel = dDay === today ? fmtTime(d.ts) : `${fmtDate(d.ts)} · ${fmtTime(d.ts)}`;
+      return `<div class="log-entry" style="animation-delay:${i*0.03}s">
+        <div>
+          <div class="log-med ${d.med}">${name}</div>
+          <div class="log-meta">${dateLabel}</div>
+        </div>
+        <button class="log-undo" onclick="undoDose('${d.key}')">Remove</button>
+      </div>`;
+    }).join('');
+  }
+
+  setInterval(render, 60000);
+  init();
+</script>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/fevercycle/sw.js').catch(() => {});
+  }
+</script>
+</body>
+</html>
