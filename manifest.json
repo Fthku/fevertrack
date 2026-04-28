@@ -2,7 +2,7 @@
   "name": "FeverCycle",
   "short_name": "FeverCycle",
   "description": "Novimol & Nurofen cycle tracker",
-  "start_url": "/fevercycle/",
+  "start_url": "/fevertrack/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#0f1117",
