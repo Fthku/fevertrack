@@ -214,7 +214,9 @@
     appId: "1:202467683554:web:17131e1bee4e1cf90602bb"
   };
 
-  const INTERVAL_MS = 4 * 60 * 60 * 1000;
+  const INTERVAL_NOVIMOL = 4 * 60 * 60 * 1000;  // 4h
+  const INTERVAL_NUROFEN = 6 * 60 * 60 * 1000;  // 6h
+  const CYCLE_MS = 4 * 60 * 60 * 1000;            // banner: 4h after last given
   const WINDOW_MS   = 24 * 60 * 60 * 1000;
   const MAX_SLOTS   = 4;
   const ROOM_KEY    = 'fevercycle_room_v1';
@@ -299,11 +301,12 @@
   window.giveMed = function(med) {
     const last = lastDose(med);
     const now = Date.now();
+    const interval = med === 'novimol' ? INTERVAL_NOVIMOL : INTERVAL_NUROFEN;
     if (last) {
       const msSince = now - new Date(last.ts).getTime();
-      if (msSince < INTERVAL_MS) {
+      if (msSince < interval) {
         const name = med === 'novimol' ? 'נובימול' : 'נורופן';
-        if (!confirm(`⚠️ Only ${fmtCountdown(INTERVAL_MS - msSince)} since last ${name}.\n\nGive it anyway?`)) return;
+        if (!confirm(`⚠️ Only ${fmtCountdown(interval - msSince)} since last ${name}.\n\nGive it anyway?`)) return;
       }
     }
     push(dosesRef, { med, ts: new Date().toISOString() });
@@ -383,7 +386,8 @@
 
     for (const med of ['novimol', 'nurofen']) {
       const last = lastDose(med);
-      const msUntil = last ? (new Date(last.ts).getTime() + INTERVAL_MS) - now : 0;
+      const interval = med === 'novimol' ? INTERVAL_NOVIMOL : INTERVAL_NUROFEN;
+      const msUntil = last ? (new Date(last.ts).getTime() + interval) - now : 0;
       const ready = msUntil <= 0;
 
       document.getElementById('card-' + med).className = `med-card ${med}${ready ? ' next-up' : ''}`;
@@ -396,13 +400,10 @@
       renderCircles(med);
     }
 
-    // Banner
+    // Banner — cycle logic: next is always the OTHER med, 4h after the last given
+    const banner = document.getElementById('next-banner');
     const lastN = lastDose('novimol');
     const lastR = lastDose('nurofen');
-    const msN = lastN ? (new Date(lastN.ts).getTime() + INTERVAL_MS) - now : 0;
-    const msR = lastR ? (new Date(lastR.ts).getTime() + INTERVAL_MS) - now : 0;
-    const readyN = msN <= 0, readyR = msR <= 0;
-    const banner = document.getElementById('next-banner');
 
     if (!lastN && !lastR) {
       banner.className = 'next-banner ready';
@@ -412,30 +413,25 @@
       return;
     }
 
-    if (readyN && readyR) {
+    // Find whichever was given most recently — next in cycle is the other one
+    const lastAny = (!lastN) ? lastR : (!lastR) ? lastN :
+      (new Date(lastN.ts) > new Date(lastR.ts) ? lastN : lastR);
+    const nextMed = lastAny.med === 'novimol' ? 'nurofen' : 'novimol';
+    const nextName = nextMed === 'novimol' ? 'נובימול' : 'נורופן';
+    const msUntilNext = (new Date(lastAny.ts).getTime() + CYCLE_MS) - now;
+
+    if (msUntilNext <= 0) {
       banner.className = 'next-banner ready';
-      banner.innerHTML = `<div class="next-label">Ready now</div>
-        <div class="next-med">Both medications</div>
-        <div class="next-time">Tap a card to give</div>`;
-    } else if (readyN) {
-      banner.className = 'next-banner ready';
-      banner.innerHTML = `<div class="next-label">Ready now</div>
-        <div class="next-med">נובימול</div>
-        <div class="next-time">Tap the card to give</div>`;
-    } else if (readyR) {
-      banner.className = 'next-banner ready';
-      banner.innerHTML = `<div class="next-label">Ready now</div>
-        <div class="next-med">נורופן</div>
-        <div class="next-time">Tap the card to give</div>`;
+      banner.innerHTML = `<div class="next-label">Next in cycle</div>
+        <div class="next-med">${nextName}</div>
+        <div class="next-time">Ready now — tap the card to give</div>`;
     } else {
-      const [soonestMs, soonestMed] = msN < msR ? [msN, 'novimol'] : [msR, 'nurofen'];
-      const name = soonestMed === 'novimol' ? 'נובימול' : 'נורופן';
-      const cls = soonestMs < 30 * 60 * 1000 ? 'soon' : 'waiting';
+      const cls = msUntilNext < 30 * 60 * 1000 ? 'soon' : 'waiting';
       banner.className = `next-banner ${cls}`;
-      banner.innerHTML = `<div class="next-label">Next dose</div>
-        <div class="next-med">${name}</div>
-        <div class="next-time">At ${fmtTime(new Date(now + soonestMs).toISOString())}</div>
-        <div class="next-countdown">In ${fmtCountdown(soonestMs)}</div>`;
+      banner.innerHTML = `<div class="next-label">Next in cycle</div>
+        <div class="next-med">${nextName}</div>
+        <div class="next-time">At ${fmtTime(new Date(now + msUntilNext).toISOString())}</div>
+        <div class="next-countdown">In ${fmtCountdown(msUntilNext)}</div>`;
     }
   }
 
