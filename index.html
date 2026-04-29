@@ -400,7 +400,7 @@
       renderCircles(med);
     }
 
-    // Banner — cycle logic: next is always the OTHER med, 4h after the last given
+    // Banner — cycle logic: next is always the OTHER med, 4h after the last given dose (any med)
     const banner = document.getElementById('next-banner');
     const lastN = lastDose('novimol');
     const lastR = lastDose('nurofen');
@@ -413,11 +413,12 @@
       return;
     }
 
-    // Find whichever was given most recently — next in cycle is the other one
+    // The most recently given dose of ANY med — next in cycle is the other one, 4h later
     const lastAny = (!lastN) ? lastR : (!lastR) ? lastN :
       (new Date(lastN.ts) > new Date(lastR.ts) ? lastN : lastR);
     const nextMed = lastAny.med === 'novimol' ? 'nurofen' : 'novimol';
     const nextName = nextMed === 'novimol' ? 'נובימול' : 'נורופן';
+    // Cycle countdown is always based on lastAny + 4h — regardless of what nextMed's own last dose was
     const msUntilNext = (new Date(lastAny.ts).getTime() + CYCLE_MS) - now;
 
     if (msUntilNext <= 0) {
