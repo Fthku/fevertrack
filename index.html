@@ -106,7 +106,8 @@
     .dose-circle{width:100%;aspect-ratio:1;border-radius:50%;display:flex;align-items:center;justify-content:center;pointer-events:none;/* card handles tap */}
 
     .dose-circle.empty{background:var(--red-dim);border:2px solid var(--red);}
-    .dose-circle.given{background:var(--green);border:2px solid var(--green);}
+    .dose-circle.given{background:var(--green);border:2px solid var(--green);pointer-events:auto;cursor:pointer;}
+    .dose-circle.given:active{transform:scale(0.9);}
     .dose-circle.inactive{background:rgba(255,255,255,0.03);border:2px solid rgba(255,255,255,0.06);}
 
     .dose-circle.empty::after{content:'';width:11px;height:11px;border-radius:50%;background:var(--red);}
@@ -131,6 +132,21 @@
 
     @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
     @keyframes slideUp{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+    /* DOSE EDIT MODAL */
+    .dose-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:120;display:none;align-items:center;justify-content:center;padding:24px;}
+    .dose-modal-bg.open{display:flex;}
+    .dose-modal{background:var(--surface);border:1px solid var(--border2);border-radius:20px;padding:22px;width:100%;max-width:320px;}
+    .dose-modal h3{font-size:17px;font-weight:600;margin-bottom:4px;}
+    .dose-modal .sub{font-size:13px;color:var(--text2);margin-bottom:16px;}
+    .dose-modal label{display:block;font-size:12px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;}
+    .dose-modal input[type=time],.dose-modal input[type=date]{width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:13px;font-size:18px;font-family:'DM Mono',monospace;color:var(--text);outline:none;color-scheme:dark;margin-bottom:16px;}
+    .dose-modal input[type=time]:focus,.dose-modal input[type=date]:focus{border-color:var(--blue);}
+    .dose-modal-row{display:flex;gap:8px;}
+    .dm-btn{flex:1;border:none;border-radius:12px;padding:13px;font-size:14px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;}
+    .dm-btn.save{background:var(--blue);color:#fff;}
+    .dm-btn.cancel{background:var(--surface2);border:1px solid var(--border2);color:var(--text2);}
+    .dm-remove{width:100%;margin-top:10px;background:none;border:1px solid rgba(244,100,95,0.35);border-radius:12px;padding:12px;font-size:13px;font-weight:500;font-family:'DM Sans',sans-serif;color:var(--red);cursor:pointer;}
+    .dm-remove:active{background:var(--red-dim);}
   </style>
 </head>
 <body>
@@ -197,6 +213,23 @@
       <div class="section-title">All doses given</div>
       <div id="log-list"></div>
     </div>
+  </div>
+</div>
+
+<!-- DOSE EDIT / REMOVE MODAL -->
+<div class="dose-modal-bg" id="dose-edit-modal">
+  <div class="dose-modal">
+    <h3 id="dose-edit-title">Edit dose</h3>
+    <div class="sub" id="dose-edit-sub"></div>
+    <label>Date given</label>
+    <input type="date" id="dose-edit-date" />
+    <label>Time given</label>
+    <input type="time" id="dose-edit-time" />
+    <div class="dose-modal-row">
+      <button class="dm-btn cancel" onclick="closeDoseEdit()">Cancel</button>
+      <button class="dm-btn save" onclick="saveEditedDose()">Save</button>
+    </div>
+    <button class="dm-remove" onclick="removeDoseFromEdit()">Remove dose</button>
   </div>
 </div>
 
@@ -299,15 +332,14 @@
 
   // ── ACTIONS ───────────────────────────────────────────────────────────────
   window.giveMed = function(med) {
-    const last = lastDose(med);
     const now = Date.now();
-    const interval = med === 'novimol' ? INTERVAL_NOVIMOL : INTERVAL_NUROFEN;
-    if (last) {
-      const msSince = now - new Date(last.ts).getTime();
-      if (msSince < interval) {
-        const name = med === 'novimol' ? 'נובימול' : 'נורופן';
-        if (!confirm(`⚠️ Only ${fmtCountdown(interval - msSince)} since last ${name}.\n\nGive it anyway?`)) return;
-      }
+    const info = computeSchedule(dosesArray(), now).meds[med];
+    if (info.allowedAt > now) {
+      const name = MED_NAME[med];
+      const msg = info.reason === 'cap'
+        ? `⚠️ ${name} was already given 4 times in the last 24h.\nNext allowed at ${fmtTime(new Date(info.allowedAt).toISOString())}.\n\nGive it anyway?`
+        : `⚠️ Too early for ${name} — ${fmtCountdown(info.allowedAt - now)} left (next at ${fmtTime(new Date(info.allowedAt).toISOString())}).\n\nGive it anyway?`;
+      if (!confirm(msg)) return;
     }
     push(dosesRef, { med, ts: new Date().toISOString() });
   };
@@ -315,6 +347,58 @@
   window.undoDose = function(key) {
     if (!confirm('Remove this dose?')) return;
     remove(ref(db, `rooms/${roomCode}/doses/${key}`));
+  };
+
+  // ── EDIT / REMOVE A SPECIFIC DOSE (from a circle) ─────────────────────────
+  let editingDose = null; // { key, med }
+
+  window.editDose = function(ev, med, key) {
+    ev.stopPropagation(); // don't let the card log a new dose
+    const dose = doses[key];
+    if (!dose) return;
+    editingDose = { key, med };
+    const name = med === 'novimol' ? 'נובימול' : 'נורופן';
+    document.getElementById('dose-edit-title').textContent = name;
+    const d = new Date(dose.ts);
+    const dayLabel = d.toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' });
+    document.getElementById('dose-edit-sub').textContent = `Given ${dayLabel} at ${fmtTime(dose.ts)}`;
+    document.getElementById('dose-edit-date').value =
+      `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    document.getElementById('dose-edit-time').value =
+      `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    document.getElementById('dose-edit-modal').classList.add('open');
+  };
+
+  window.saveEditedDose = function() {
+    if (!editingDose) return;
+    const dose = doses[editingDose.key];
+    if (!dose) { closeDoseEdit(); return; }
+    const dateStr = document.getElementById('dose-edit-date').value; // YYYY-MM-DD (local)
+    const timeStr = document.getElementById('dose-edit-time').value;  // HH:MM (local)
+    if (!dateStr || !timeStr) return;
+    const [y, mo, da] = dateStr.split('-').map(Number);
+    const [h, mi] = timeStr.split(':').map(Number);
+    // Build the instant in LOCAL time, then store as UTC ISO
+    const d = new Date(y, mo - 1, da, h, mi, 0, 0);
+    // Block future timestamps (allow a 1-minute grace for clock skew)
+    if (d.getTime() > Date.now() + 60000) {
+      alert("That's in the future — a dose can't be given later than now.");
+      return;
+    }
+    set(ref(db, `rooms/${roomCode}/doses/${editingDose.key}`), { med: dose.med, ts: d.toISOString() });
+    closeDoseEdit();
+  };
+
+  window.removeDoseFromEdit = function() {
+    if (!editingDose) return;
+    if (!confirm('Remove this dose? This cannot be undone.')) return;
+    remove(ref(db, `rooms/${roomCode}/doses/${editingDose.key}`));
+    closeDoseEdit();
+  };
+
+  window.closeDoseEdit = function() {
+    document.getElementById('dose-edit-modal').classList.remove('open');
+    editingDose = null;
   };
 
   // ── FORMAT ────────────────────────────────────────────────────────────────
@@ -358,9 +442,9 @@
     for (let i = 0; i < MAX_SLOTS; i++) {
       const dose = oldestFirst[i];
       if (dose) {
-        // Given dose in window
+        // Given dose in window — tappable to edit/remove
         html += `<div class="dose-slot given-slot">
-          <div class="dose-circle given"></div>
+          <div class="dose-circle given" onclick="editDose(event, '${med}', '${dose.key}')"></div>
           <span class="dose-ts">${fmtTime(dose.ts)}</span>
         </div>`;
       } else if (i === recent.length) {
@@ -380,32 +464,77 @@
     container.innerHTML = html;
   }
 
+  // ── SCHEDULE RULES (pure — recomputed from scratch on every change) ──────
+  // Rules:
+  //  • נובימול: min 4h between its own doses · נורופן: min 6h between its own doses
+  //  • Each med: max 4 doses in any rolling 24h window
+  //  • Cycle: alternate meds, next one 4h after the last dose of either med.
+  //    If the alternate isn't allowed at that time, suggest whichever med
+  //    becomes allowed first (ties go to the alternate).
+  const DAILY_CAP = 4;
+  const MED_NAME = { novimol: 'נובימול', nurofen: 'נורופן' };
+  const MED_INTERVAL = { novimol: INTERVAL_NOVIMOL, nurofen: INTERVAL_NUROFEN };
+
+  function computeSchedule(list, now) {
+    // list: [{med, ts}] any order. Ignore anything dated in the future.
+    const valid = list
+      .map(d => ({ med: d.med, t: new Date(d.ts).getTime() }))
+      .filter(d => !isNaN(d.t) && d.t <= now + 60000)
+      .sort((a, b) => b.t - a.t); // newest first
+
+    const meds = {};
+    for (const med of ['novimol', 'nurofen']) {
+      const own = valid.filter(d => d.med === med);
+      const intervalAt = own.length ? own[0].t + MED_INTERVAL[med] : -Infinity;
+      // 24h cap: a new dose is allowed once the 4th-most-recent dose is 24h old
+      const capAt = own.length >= DAILY_CAP ? own[DAILY_CAP - 1].t + WINDOW_MS : -Infinity;
+      const allowedAt = Math.max(intervalAt, capAt);
+      const reason = allowedAt === -Infinity ? null : (capAt > intervalAt ? 'cap' : 'interval');
+      meds[med] = { last: own[0] || null, allowedAt, reason };
+    }
+
+    if (!valid.length) return { meds, next: null };
+
+    const lastAny = valid[0];
+    const cycleAt = lastAny.t + CYCLE_MS;
+    const alt = lastAny.med === 'novimol' ? 'nurofen' : 'novimol';
+    const same = lastAny.med;
+    const altAt = Math.max(cycleAt, meds[alt].allowedAt);
+    const sameAt = Math.max(cycleAt, meds[same].allowedAt);
+    const pick = altAt <= sameAt ? alt : same;
+    return {
+      meds,
+      next: {
+        med: pick,
+        at: pick === alt ? altAt : sameAt,
+        alternated: pick === alt,
+        blockedAlt: pick === alt ? null : { med: alt, at: meds[alt].allowedAt, reason: meds[alt].reason }
+      }
+    };
+  }
+
   // ── RENDER ────────────────────────────────────────────────────────────────
   function render() {
     const now = Date.now();
+    const sched = computeSchedule(dosesArray(), now);
 
     for (const med of ['novimol', 'nurofen']) {
-      const last = lastDose(med);
-      const interval = med === 'novimol' ? INTERVAL_NOVIMOL : INTERVAL_NUROFEN;
-      const msUntil = last ? (new Date(last.ts).getTime() + interval) - now : 0;
+      const info = sched.meds[med];
+      const msUntil = info.allowedAt - now;
       const ready = msUntil <= 0;
 
       document.getElementById('card-' + med).className = `med-card ${med}${ready ? ' next-up' : ''}`;
       document.getElementById('status-' + med).textContent = ready
-        ? (last ? '✓ Ready' : 'Tap to give')
-        : `Next at ${fmtTime(new Date(now + msUntil).toISOString())}`;
-      document.getElementById('early-' + med).innerHTML = (!ready && last)
-        ? `<span class="early-tag">${fmtCountdown(msUntil)} early</span>` : '';
+        ? (info.last ? '✓ Ready' : 'Tap to give')
+        : `Next at ${fmtTime(new Date(info.allowedAt).toISOString())}`;
+      document.getElementById('early-' + med).innerHTML = (!ready && info.last)
+        ? `<span class="early-tag">${fmtCountdown(msUntil)} early${info.reason === 'cap' ? ' · 4/24h' : ''}</span>` : '';
 
       renderCircles(med);
     }
 
-    // Banner — cycle logic: next is always the OTHER med, 4h after the last given dose (any med)
     const banner = document.getElementById('next-banner');
-    const lastN = lastDose('novimol');
-    const lastR = lastDose('nurofen');
-
-    if (!lastN && !lastR) {
+    if (!sched.next) {
       banner.className = 'next-banner ready';
       banner.innerHTML = `<div class="next-label">Start with</div>
         <div class="next-med">Either medication</div>
@@ -413,26 +542,27 @@
       return;
     }
 
-    // The most recently given dose of ANY med — next in cycle is the other one, 4h later
-    const lastAny = (!lastN) ? lastR : (!lastR) ? lastN :
-      (new Date(lastN.ts) > new Date(lastR.ts) ? lastN : lastR);
-    const nextMed = lastAny.med === 'novimol' ? 'nurofen' : 'novimol';
-    const nextName = nextMed === 'novimol' ? 'נובימול' : 'נורופן';
-    // Cycle countdown is always based on lastAny + 4h — regardless of what nextMed's own last dose was
-    const msUntilNext = (new Date(lastAny.ts).getTime() + CYCLE_MS) - now;
+    const n = sched.next;
+    const name = MED_NAME[n.med];
+    let note = '';
+    if (n.blockedAlt) {
+      const why = n.blockedAlt.reason === 'cap' ? '4 doses in 24h' : '6h rule';
+      note = `<div class="next-countdown">${MED_NAME[n.blockedAlt.med]} not allowed until ${fmtTime(new Date(n.blockedAlt.at).toISOString())} (${why})</div>`;
+    }
+    const msUntilNext = n.at - now;
 
     if (msUntilNext <= 0) {
       banner.className = 'next-banner ready';
       banner.innerHTML = `<div class="next-label">Next in cycle</div>
-        <div class="next-med">${nextName}</div>
-        <div class="next-time">Ready now — tap the card to give</div>`;
+        <div class="next-med">${name}</div>
+        <div class="next-time">Ready now — tap the card to give</div>${note}`;
     } else {
       const cls = msUntilNext < 30 * 60 * 1000 ? 'soon' : 'waiting';
       banner.className = `next-banner ${cls}`;
       banner.innerHTML = `<div class="next-label">Next in cycle</div>
-        <div class="next-med">${nextName}</div>
-        <div class="next-time">At ${fmtTime(new Date(now + msUntilNext).toISOString())}</div>
-        <div class="next-countdown">In ${fmtCountdown(msUntilNext)}</div>`;
+        <div class="next-med">${name}</div>
+        <div class="next-time">At ${fmtTime(new Date(n.at).toISOString())}</div>
+        <div class="next-countdown">In ${fmtCountdown(msUntilNext)}</div>${note}`;
     }
   }
 
