@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FeverCycle reset</title>
+<style>
+  body{margin:0;background:#0f1117;color:#eef0f6;font-family:system-ui,sans-serif;padding:32px 20px;}
+  h1{font-size:20px;margin:0 0 6px;}
+  p{color:#8b91a8;font-size:14px;line-height:1.5;margin:0 0 20px;}
+  #log{background:#181c27;border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:14px;font-family:monospace;font-size:13px;line-height:1.7;white-space:pre-wrap;}
+  a{display:block;margin-top:20px;text-align:center;background:#4f9cf9;color:#fff;text-decoration:none;padding:14px;border-radius:12px;font-weight:600;}
+</style>
+</head>
+<body>
+  <h1>FeverCycle cleanup</h1>
+  <p>Removes FeverCycle's service worker and offline cache only. Your doses (Firebase), room code, and the other apps are not touched.</p>
+  <div id="log">Working…</div>
+  <a href="/fevertrack/">Open FeverCycle</a>
+<script>
+(async () => {
+  const out = [];
+  try {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    const mine = regs.filter(r => r.scope.includes('/fevertrack/'));
+    for (const r of mine) { await r.unregister(); out.push('✓ removed service worker: ' + r.scope); }
+    if (!mine.length) out.push('• no FeverCycle service worker found');
+  } catch (e) { out.push('✗ service worker: ' + e.message); }
+  try {
+    const keys = await caches.keys();
+    const mine = keys.filter(k => k.startsWith('fevercycle-'));
+    for (const k of mine) { await caches.delete(k); out.push('✓ removed cache: ' + k); }
+    if (!mine.length) out.push('• no FeverCycle cache found');
+  } catch (e) { out.push('✗ cache: ' + e.message); }
+  out.push('\nDone.');
+  document.getElementById('log').textContent = out.join('\n');
+})();
+</script>
+</body>
+</html>
